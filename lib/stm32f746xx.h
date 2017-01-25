@@ -4938,17 +4938,17 @@ typedef struct
 
 /*******************  Bit definition for I2C_TIMINGR register *******************/
 #define  I2C_TIMINGR_SCLL                    ((uint32_t)0x000000FF)        /*!< SCL low period (master mode)  */
-#define  I2C_TIMINGR_SCLH                    ((uint32_t)0x0000FF00)        /*!< SCL high period (master mode) */
+#define  I2C_TIMINGR_SCLH                    ((uint32_t)0x0000FF00)        /*!< SCL high period (master mode) */TimeOut
 #define  I2C_TIMINGR_SDADEL                  ((uint32_t)0x000F0000)        /*!< Data hold time                */
 #define  I2C_TIMINGR_SCLDEL                  ((uint32_t)0x00F00000)        /*!< Data setup time               */
 #define  I2C_TIMINGR_PRESC                   ((uint32_t)0xF0000000)        /*!< Timings prescaler             */
 
 /******************* Bit definition for I2C_TIMEOUTR register *******************/
-#define  I2C_TIMEOUTR_TIMEOUTA               ((uint32_t)0x00000FFF)        /*!< Bus timeout A                 */
-#define  I2C_TIMEOUTR_TIDLE                  ((uint32_t)0x00001000)        /*!< Idle clock timeout detection  */
-#define  I2C_TIMEOUTR_TIMOUTEN               ((uint32_t)0x00008000)        /*!< Clock timeout enable          */
-#define  I2C_TIMEOUTR_TIMEOUTB               ((uint32_t)0x0FFF0000)        /*!< Bus timeout B                 */
-#define  I2C_TIMEOUTR_TEXTEN                 ((uint32_t)0x80000000)        /*!< Extended clock timeout enable */
+#define  I2C_TIMEOUTR_TIMEOUTA               ((uint32_t)0x00000FFF)        /*!< Bus TimeOut A                 */
+#define  I2C_TIMEOUTR_TIDLE                  ((uint32_t)0x00001000)        /*!< Idle clock TimeOut detection  */
+#define  I2C_TIMEOUTR_TIMOUTEN               ((uint32_t)0x00008000)        /*!< Clock TimeOut enable          */
+#define  I2C_TIMEOUTR_TIMEOUTB               ((uint32_t)0x0FFF0000)        /*!< Bus TimeOut B                 */
+#define  I2C_TIMEOUTR_TEXTEN                 ((uint32_t)0x80000000)        /*!< Extended clock TimeOut enable */
 
 /******************  Bit definition for I2C_ISR register  *********************/
 #define  I2C_ISR_TXE                         ((uint32_t)0x00000001)        /*!< Transmit data register empty    */
@@ -6715,7 +6715,7 @@ typedef struct
 #define  SDMMC_RESP4_CARDSTATUS4              ((uint32_t)0xFFFFFFFF)        /*!<Card Status */
 
 /******************  Bit definition for SDMMC_DTIMER register  *****************/
-#define  SDMMC_DTIMER_DATATIME                ((uint32_t)0xFFFFFFFF)        /*!<Data timeout period. */
+#define  SDMMC_DTIMER_DATATIME                ((uint32_t)0xFFFFFFFF)        /*!<Data TimeOut period. */
 
 /******************  Bit definition for SDMMC_DLEN register  *******************/
 #define  SDMMC_DLEN_DATALENGTH                ((uint32_t)0x01FFFFFF)        /*!<Data length value    */
@@ -6743,8 +6743,8 @@ typedef struct
 /******************  Bit definition for SDMMC_STA register  ********************/
 #define  SDMMC_STA_CCRCFAIL                   ((uint32_t)0x00000001)        /*!<Command response received (CRC check failed)  */
 #define  SDMMC_STA_DCRCFAIL                   ((uint32_t)0x00000002)        /*!<Data block sent/received (CRC check failed)   */
-#define  SDMMC_STA_CTIMEOUT                   ((uint32_t)0x00000004)        /*!<Command response timeout                      */
-#define  SDMMC_STA_DTIMEOUT                   ((uint32_t)0x00000008)        /*!<Data timeout                                  */
+#define  SDMMC_STA_CTIMEOUT                   ((uint32_t)0x00000004)        /*!<Command response TimeOut                      */
+#define  SDMMC_STA_DTIMEOUT                   ((uint32_t)0x00000008)        /*!<Data TimeOut                                  */
 #define  SDMMC_STA_TXUNDERR                   ((uint32_t)0x00000010)        /*!<Transmit FIFO underrun error                  */
 #define  SDMMC_STA_RXOVERR                    ((uint32_t)0x00000020)        /*!<Received FIFO overrun error                   */
 #define  SDMMC_STA_CMDREND                    ((uint32_t)0x00000040)        /*!<Command response received (CRC check passed)  */
@@ -8211,13 +8211,13 @@ typedef struct
 #define ETH_DMASR_ERS        ((uint32_t)0x00004000)  /* Early receive status */
 #define ETH_DMASR_FBES       ((uint32_t)0x00002000)  /* Fatal bus error status */
 #define ETH_DMASR_ETS        ((uint32_t)0x00000400)  /* Early transmit status */
-#define ETH_DMASR_RWTS       ((uint32_t)0x00000200)  /* Receive watchdog timeout status */
+#define ETH_DMASR_RWTS       ((uint32_t)0x00000200)  /* Receive watchdog TimeOut status */
 #define ETH_DMASR_RPSS       ((uint32_t)0x00000100)  /* Receive process stopped status */
 #define ETH_DMASR_RBUS       ((uint32_t)0x00000080)  /* Receive buffer unavailable status */
 #define ETH_DMASR_RS         ((uint32_t)0x00000040)  /* Receive status */
 #define ETH_DMASR_TUS        ((uint32_t)0x00000020)  /* Transmit underflow status */
 #define ETH_DMASR_ROS        ((uint32_t)0x00000010)  /* Receive overflow status */
-#define ETH_DMASR_TJTS       ((uint32_t)0x00000008)  /* Transmit jabber timeout status */
+#define ETH_DMASR_TJTS       ((uint32_t)0x00000008)  /* Transmit jabber TimeOut status */
 #define ETH_DMASR_TBUS       ((uint32_t)0x00000004)  /* Transmit buffer unavailable status */
 #define ETH_DMASR_TPSS       ((uint32_t)0x00000002)  /* Transmit process stopped status */
 #define ETH_DMASR_TS         ((uint32_t)0x00000001)  /* Transmit status */
@@ -8254,13 +8254,13 @@ typedef struct
 #define ETH_DMAIER_ERIE      ((uint32_t)0x00004000)  /* Early receive interrupt enable */
 #define ETH_DMAIER_FBEIE     ((uint32_t)0x00002000)  /* Fatal bus error interrupt enable */
 #define ETH_DMAIER_ETIE      ((uint32_t)0x00000400)  /* Early transmit interrupt enable */
-#define ETH_DMAIER_RWTIE     ((uint32_t)0x00000200)  /* Receive watchdog timeout interrupt enable */
+#define ETH_DMAIER_RWTIE     ((uint32_t)0x00000200)  /* Receive watchdog TimeOut interrupt enable */
 #define ETH_DMAIER_RPSIE     ((uint32_t)0x00000100)  /* Receive process stopped interrupt enable */
 #define ETH_DMAIER_RBUIE     ((uint32_t)0x00000080)  /* Receive buffer unavailable interrupt enable */
 #define ETH_DMAIER_RIE       ((uint32_t)0x00000040)  /* Receive interrupt enable */
 #define ETH_DMAIER_TUIE      ((uint32_t)0x00000020)  /* Transmit Underflow interrupt enable */
 #define ETH_DMAIER_ROIE      ((uint32_t)0x00000010)  /* Receive Overflow interrupt enable */
-#define ETH_DMAIER_TJTIE     ((uint32_t)0x00000008)  /* Transmit jabber timeout interrupt enable */
+#define ETH_DMAIER_TJTIE     ((uint32_t)0x00000008)  /* Transmit jabber TimeOut interrupt enable */
 #define ETH_DMAIER_TBUIE     ((uint32_t)0x00000004)  /* Transmit buffer unavailable interrupt enable */
 #define ETH_DMAIER_TPSIE     ((uint32_t)0x00000002)  /* Transmit process stopped interrupt enable */
 #define ETH_DMAIER_TIE       ((uint32_t)0x00000001)  /* Transmit interrupt enable */
@@ -8347,7 +8347,7 @@ typedef struct
 #define USB_OTG_GOTGINT_SRSSCHG                 ((uint32_t)0x00000100)            /*!< Session request success status change  */
 #define USB_OTG_GOTGINT_HNSSCHG                 ((uint32_t)0x00000200)            /*!< Host negotiation success status change */
 #define USB_OTG_GOTGINT_HNGDET                  ((uint32_t)0x00020000)            /*!< Host negotiation detected              */
-#define USB_OTG_GOTGINT_ADTOCHG                 ((uint32_t)0x00040000)            /*!< A-device timeout change                */
+#define USB_OTG_GOTGINT_ADTOCHG                 ((uint32_t)0x00040000)            /*!< A-device TimeOut change                */
 #define USB_OTG_GOTGINT_DBCDNE                  ((uint32_t)0x00080000)            /*!< Debounce done                          */
 #define USB_OTG_GOTGINT_IDCHNG                  ((uint32_t)0x00100000)            /*!< Change in ID pin input value           */
 
@@ -8395,7 +8395,7 @@ typedef struct
 #define USB_OTG_GAHBCFG_PTXFELVL                ((uint32_t)0x00000100)            /*!< Periodic TxFIFO empty level */
 
 /********************  Bit definition for USB_OTG_GUSBCFG register  ********************/
-#define USB_OTG_GUSBCFG_TOCAL                   ((uint32_t)0x00000007)            /*!< FS timeout calibration */
+#define USB_OTG_GUSBCFG_TOCAL                   ((uint32_t)0x00000007)            /*!< FS TimeOut calibration */
 #define USB_OTG_GUSBCFG_TOCAL_0                 ((uint32_t)0x00000001)            /*!<Bit 0 */
 #define USB_OTG_GUSBCFG_TOCAL_1                 ((uint32_t)0x00000002)            /*!<Bit 1 */
 #define USB_OTG_GUSBCFG_TOCAL_2                 ((uint32_t)0x00000004)            /*!<Bit 2 */

@@ -55,8 +55,8 @@ typedef enum
   // SD specific error defines
     SD_CMD_CRC_FAIL                    = (1),   // Command response received (but CRC check failed)
     SD_DATA_CRC_FAIL                   = (2),   // Data block sent/received (CRC check failed)
-    SD_CMD_RSP_TIMEOUT                 = (3),   // Command response timeout
-    SD_DATA_TIMEOUT                    = (4),   // Data timeout
+    SD_CMD_RSP_TIMEOUT                 = (3),   // Command response TimeOut
+    SD_DATA_TIMEOUT                    = (4),   // Data TimeOut
     SD_TX_UNDERRUN                     = (5),   // Transmit FIFO underrun
     SD_RX_OVERRUN                      = (6),   // Receive FIFO overrun
     SD_START_BIT_ERR                   = (7),   // Start bit not detected on all data signals in wide bus mode
@@ -111,7 +111,7 @@ typedef struct
     uint8_t  PERFORMANCE_MOVE;        // Carries information about the card's performance move
     uint8_t  AU_SIZE;                 // Carries information about the card's allocation unit size
     uint16_t ERASE_SIZE;              // Determines the number of AUs to be erased in one operation
-    uint8_t  ERASE_TIMEOUT;           // Determines the timeout for any number of AU erase
+    uint8_t  ERASE_TIMEOUT;           // Determines the TimeOut for any number of AU erase
     uint8_t  ERASE_OFFSET;            // Carries information about the erase offset
 } SD_CardStatus_t;
 
