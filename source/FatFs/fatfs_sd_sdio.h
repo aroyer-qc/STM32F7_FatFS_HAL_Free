@@ -129,7 +129,7 @@ FRESULT          FATFS_GetDriveSize          (char* str, FATFS_Size_t* SizeStruc
 SD_Error_t       SD_GetStatus                (void);
 SD_Error_t       SD_GetCardInfo              (void);
 
-SD_Error_t       SD_Erase                    (uint64_t startaddr, uint64_t endaddr);
+SD_Error_t       SD_Erase                    (uint64_t StartAddress, uint64_t EndAddress);
 SD_Error_t       SD_SendSDStatus             (uint32_t *pSDstatus);
 SD_Error_t       SD_GetCardStatus            (SD_CardStatus_t* pCardStatus);
 
