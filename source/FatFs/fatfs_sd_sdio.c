@@ -30,7 +30,7 @@
                                                     SDMMC_ICR_DBCKENDC))
 
 #define SDMMC_CMD0TIMEOUT               ((uint32_t)0x00010000)
-#define SD_SOFTWARE_COMMAND_TIMEOUT     10
+#define SD_SOFTWARE_COMMAND_TIMEOUT     ((uint32_t)0x00010000)
 
 #define SD_OCR_ADDR_OUT_OF_RANGE        ((uint32_t)0x80000000)
 #define SD_OCR_ADDR_MISALIGNED          ((uint32_t)0x40000000)
@@ -279,7 +279,8 @@ static DSTATUS          Status;
 
 static bool 	        SD_IsDetected               (void);
 static void             SD_DataTransferInit         (uint32_t Size, uint32_t DataBlockSize, bool IsItReadFromCard);
-static void             SD_TransmitCommand          (uint32_t Command, uint32_t Argument, uint8_t ResponseType);
+static SD_Error_t       SD_TransmitCommand          (uint32_t Command, uint32_t Argument, uint8_t ResponseType);
+static SD_Error_t       SD_CmdResponse              (uint8_t SD_CMD);
 static void             SD_GetResponse              (uint32_t* pResponse);
 static void             SD_DMA_Complete             (DMA_Stream_TypeDef* pDMA_Stream);
 static SD_Error_t       SD_InitializeCard           (void);
@@ -292,7 +293,6 @@ static SD_Error_t       SD_PowerON                  (void);
 static SD_Error_t       SD_SendStatus               (uint32_t *pCardStatus);
 static SD_Error_t       SD_IsCardProgramming        (uint8_t *pStatus);
 static SD_Error_t       SD_CmdError                 (void);
-static SD_Error_t       SD_CmdResp1Error            (uint8_t SD_CMD);
 static SD_Error_t       SD_CmdResp7Error            (void);
 static SD_Error_t       SD_CmdResp3Error            (void);
 static SD_Error_t       SD_CmdResp2Error            (void);
@@ -331,7 +331,6 @@ static void SD_DataTransferInit(uint32_t Size, uint32_t DataBlockSize, bool IsIt
     SDMMC1->DTIMER = SD_DATATIMEOUT;       // Set the SDMMC Data TimeOut value
     SDMMC1->DLEN   = Size;                  // Set the SDMMC DataLength value
     Direction      = (IsItReadFromCard == true) ? SDMMC_DCTRL_DTDIR : 0;
-    //SDMMC1->DCTRL &= ~(uint32_t)DCTRL_CLEAR_MASK;
     SDMMC1->DCTRL |=  (uint32_t)(DataBlockSize | Direction | SDMMC_DCTRL_DTEN);
 }
 
@@ -343,29 +342,86 @@ static void SD_DataTransferInit(uint32_t Size, uint32_t DataBlockSize, bool IsIt
   * @param  uint32_t Command
   * @param  uint32_t Argument              Must provide the response size
   * @param  uint8_t ResponseType
+  * @retval SD Card error state
   */
-static void SD_TransmitCommand(uint32_t Command, uint32_t Argument, uint8_t ResponseType)
+static SD_Error_t SD_TransmitCommand(uint32_t Command, uint32_t Argument, uint8_t ResponseType)
 {
     uint32_t Status;
     uint32_t Flag;
 
-    // Clear the Command Flags
-    SDMMC1->ICR = SDMMC_ICR_STATIC_FLAGS;
-
-    // Send Command
-    SDMMC1->ARG  = (uint32_t)Argument;                         // Set the SDMMC Argument value
-   // SDMMC1->CMD &= (uint32_t)~CMD_CLEAR_MASK;                  // Reset parameters
+    SDMMC1->ICR = SDMMC_ICR_STATIC_FLAGS;                     // Clear the Command Flags
+    SDMMC1->ARG = (uint32_t)Argument;                         // Set the SDMMC Argument value
     SDMMC1->CMD = (uint32_t)(Command | SDMMC_CMD_CPSMEN);     // Set SDMMC command parameters
 
-/*
-    m_TimeOut = SD_SOFTWARE_COMMAND_TIMEOUT;
+    if(ResponseType == 1) return SD_CmdResponse(Command & SDMMC_CMD_CMDINDEX);
+    return SD_OK;
+}
+
+
+/** -----------------------------------------------------------------------------------------------------------------*/
+/**
+  * @brief  Checks for error conditions for any response.
+  * @param  SD_CMD: The sent command Index
+  * @retval SD Card error state
+  */
+static SD_Error_t SD_CmdResponse(uint8_t SD_CMD)
+{
+    uint32_t Response_R1;
+    uint32_t TimeOut;
+
+    TimeOut = SD_SOFTWARE_COMMAND_TIMEOUT;
     do
     {
         Status = SDMMC1->STA;
-        if(m_TimeOut == 0) Status = SDMMC_STA_CTIMEOUT;
+        TimeOut--;
+        if(TimeOut == 0)
+        {
+            Status = SDMMC_STA_CTIMEOUT;
+        }
     }
-    while((Status & (SDMMC_STA_CTIMEOUT | SDMMC_STA_CMDREND | SDMMC_STA_CCRCFAIL)) == 0);
-        */
+    while((Status & (SDMMC_STA_CCRCFAIL | SDMMC_STA_CMDREND | SDMMC_STA_CTIMEOUT)) == 0);
+
+    if((SDMMC1->STA & SDMMC_STA_CTIMEOUT) != 0)
+    {
+        SDMMC1->ICR = SDMMC_ICR_CTIMEOUTC;
+        return SD_CMD_RSP_TIMEOUT;
+    }
+    else if((SDMMC1->STA & SDMMC_STA_CCRCFAIL) != 0)
+    {
+        SDMMC1->ICR = SDMMC_ICR_CCRCFAILC;
+        return SD_CMD_CRC_FAIL;
+    }
+
+    // Check response received is of desired command
+    if((uint8_t)SDMMC1->RESPCMD != SD_CMD)
+    {
+        return SD_ILLEGAL_CMD;
+    }
+
+    // We have received response, retrieve it for analysis
+    Response_R1 = SDMMC1->RESP1;
+
+    if((Response_R1 & SD_OCR_ERRORBITS)             == SD_ALLZERO)                      return SD_OK;
+    if((Response_R1 & SD_OCR_ADDR_OUT_OF_RANGE)     == SD_OCR_ADDR_OUT_OF_RANGE)        return SD_ADDR_OUT_OF_RANGE;
+    if((Response_R1 & SD_OCR_ADDR_MISALIGNED)       == SD_OCR_ADDR_MISALIGNED)          return SD_ADDR_MISALIGNED;
+    if((Response_R1 & SD_OCR_BLOCK_LEN_ERR)         == SD_OCR_BLOCK_LEN_ERR)            return SD_BLOCK_LEN_ERR;
+    if((Response_R1 & SD_OCR_ERASE_SEQ_ERR)         == SD_OCR_ERASE_SEQ_ERR)            return SD_ERASE_SEQ_ERR;
+    if((Response_R1 & SD_OCR_BAD_ERASE_PARAM)       == SD_OCR_BAD_ERASE_PARAM)          return SD_BAD_ERASE_PARAM;
+    if((Response_R1 & SD_OCR_WRITE_PROT_VIOLATION)  == SD_OCR_WRITE_PROT_VIOLATION)     return SD_WRITE_PROT_VIOLATION;
+    if((Response_R1 & SD_OCR_LOCK_UNLOCK_FAILED)    == SD_OCR_LOCK_UNLOCK_FAILED)       return SD_LOCK_UNLOCK_FAILED;
+    if((Response_R1 & SD_OCR_COM_CRC_FAILED)        == SD_OCR_COM_CRC_FAILED)           return SD_COM_CRC_FAILED;
+    if((Response_R1 & SD_OCR_ILLEGAL_CMD)           == SD_OCR_ILLEGAL_CMD)              return SD_ILLEGAL_CMD;
+    if((Response_R1 & SD_OCR_CARD_ECC_FAILED)       == SD_OCR_CARD_ECC_FAILED)          return SD_CARD_ECC_FAILED;
+    if((Response_R1 & SD_OCR_CC_ERROR)              == SD_OCR_CC_ERROR)                 return SD_CC_ERROR;
+    if((Response_R1 & SD_OCR_GENERAL_UNKNOWN_ERROR) == SD_OCR_GENERAL_UNKNOWN_ERROR)    return SD_GENERAL_UNKNOWN_ERROR;
+    if((Response_R1 & SD_OCR_STREAM_READ_UNDERRUN)  == SD_OCR_STREAM_READ_UNDERRUN)     return SD_STREAM_READ_UNDERRUN;
+    if((Response_R1 & SD_OCR_STREAM_WRITE_OVERRUN)  == SD_OCR_STREAM_WRITE_OVERRUN)     return SD_STREAM_WRITE_OVERRUN;
+    if((Response_R1 & SD_OCR_CID_CSD_OVERWRITE)     == SD_OCR_CID_CSD_OVERWRITE)        return SD_CID_CSD_OVERWRITE;
+    if((Response_R1 & SD_OCR_WP_ERASE_SKIP)         == SD_OCR_WP_ERASE_SKIP)            return SD_WP_ERASE_SKIP;
+    if((Response_R1 & SD_OCR_CARD_ECC_DISABLED)     == SD_OCR_CARD_ECC_DISABLED)        return SD_CARD_ECC_DISABLED;
+    if((Response_R1 & SD_OCR_ERASE_RESET)           == SD_OCR_ERASE_RESET)              return SD_ERASE_RESET;
+    if((Response_R1 & SD_OCR_AKE_SEQ_ERROR)         == SD_OCR_AKE_SEQ_ERROR)            return SD_AKE_SEQ_ERROR;
+    return SD_OK;
 }
 
 
@@ -502,8 +558,7 @@ SD_Error_t SD_ReadBlocks_DMA(uint32_t *pReadBuffer, uint64_t ReadAddr, uint32_t 
     }
 
     // Set Block Size for Card
-    SD_TransmitCommand((SD_CMD_SET_BLOCKLEN | SDMMC_CMD_RESPONSE_SHORT), BlockSize, 1);
-    if((ErrorState = SD_CmdResp1Error(SD_CMD_SET_BLOCKLEN)) != SD_OK)                               // Check for error conditions
+    if((ErrorState = SD_TransmitCommand((SD_CMD_SET_BLOCKLEN | SDMMC_CMD_RESPONSE_SHORT), BlockSize, 1)) != SD_OK)
     {
         return ErrorState;
     }
@@ -514,11 +569,7 @@ SD_Error_t SD_ReadBlocks_DMA(uint32_t *pReadBuffer, uint64_t ReadAddr, uint32_t 
     // Send CMD18 READ_MULT_BLOCK with argument data address
     // or send CMD17 READ_SINGLE_BLOCK depending on number of block
     CmdIndex = (NumberOfBlocks > 1) ? SD_CMD_READ_MULT_BLOCK : SD_CMD_READ_SINGLE_BLOCK;
-
-    SD_TransmitCommand((CmdIndex | SDMMC_CMD_RESPONSE_SHORT), (uint32_t)ReadAddr, 1);
-
-    // Check for error conditions
-    ErrorState = SD_CmdResp1Error((NumberOfBlocks > 1) ? SD_CMD_READ_MULT_BLOCK : SD_CMD_READ_SINGLE_BLOCK);
+    ErrorState = SD_TransmitCommand((CmdIndex | SDMMC_CMD_RESPONSE_SHORT), (uint32_t)ReadAddr, 1);
 
     // Update the SD transfer error in SD handle
     SD_Handle.TransferError = ErrorState;
@@ -566,9 +617,7 @@ SD_Error_t SD_WriteBlocks_DMA(uint32_t *pWriteBuffer, uint64_t WriteAddr, uint32
         WriteAddr /= 512;
     }
 
-    SD_TransmitCommand((SD_CMD_SET_BLOCKLEN | SDMMC_CMD_RESPONSE_SHORT), BlockSize, 1);
-
-    if((ErrorState = SD_CmdResp1Error( SD_CMD_SET_BLOCKLEN)) != SD_OK)                              // Check for error conditions
+    if((ErrorState = SD_TransmitCommand((SD_CMD_SET_BLOCKLEN | SDMMC_CMD_RESPONSE_SHORT), BlockSize, 1)) != SD_OK)
     {
         return ErrorState;
     }
@@ -579,10 +628,7 @@ SD_Error_t SD_WriteBlocks_DMA(uint32_t *pWriteBuffer, uint64_t WriteAddr, uint32
     CmdIndex = (NumberOfBlocks > 1) ? SD_CMD_WRITE_MULT_BLOCK : SD_CMD_WRITE_SINGLE_BLOCK;
 
     // Set Block Size for Card
-     SD_TransmitCommand((CmdIndex | SDMMC_CMD_RESPONSE_SHORT), (uint32_t)WriteAddr, 1);
-
-    // Check for error conditions
-    if((SD_CmdResp1Error((NumberOfBlocks > 1) ? SD_CMD_WRITE_MULT_BLOCK : SD_CMD_WRITE_SINGLE_BLOCK)) != SD_OK)
+    if((ErrorState = SD_TransmitCommand((CmdIndex | SDMMC_CMD_RESPONSE_SHORT), (uint32_t)WriteAddr, 1)) != SD_OK)
     {
         return ErrorState;
     }
@@ -760,29 +806,20 @@ SD_Error_t SD_Erase(uint64_t StartAddress, uint64_t EndAddress)
         (SD_Handle.CardType == HIGH_CAPACITY_SD_CARD))
     {
         // Send CMD32 SD_ERASE_GRP_START with argument as addr
-         SD_TransmitCommand((SD_CMD_SD_ERASE_GRP_START | SDMMC_CMD_RESPONSE_SHORT), (uint32_t)StartAddress, 1);
-
-        // Check for error conditions
-        if((ErrorState = SD_CmdResp1Error(SD_CMD_SD_ERASE_GRP_START)) != SD_OK)
+        if((ErrorState = SD_TransmitCommand((SD_CMD_SD_ERASE_GRP_START | SDMMC_CMD_RESPONSE_SHORT), (uint32_t)StartAddress, 1)) != SD_OK)
         {
             return ErrorState;
         }
 
         // Send CMD33 SD_ERASE_GRP_END with argument as addr
-        SD_TransmitCommand((SD_CMD_SD_ERASE_GRP_END | SDMMC_CMD_RESPONSE_SHORT), (uint32_t)EndAddress, 1);
-
-        // Check for error conditions
-        if((ErrorState = SD_CmdResp1Error( SD_CMD_SD_ERASE_GRP_END)) != SD_OK)
+        if((ErrorState = SD_TransmitCommand((SD_CMD_SD_ERASE_GRP_END | SDMMC_CMD_RESPONSE_SHORT), (uint32_t)EndAddress, 1)) != SD_OK)
         {
             return ErrorState;
         }
     }
 
     // Send CMD38 ERASE
-    SD_TransmitCommand((SD_CMD_ERASE  | SDMMC_CMD_RESPONSE_SHORT), 0, 1);
-
-    // Check for error conditions
-    if((ErrorState = SD_CmdResp1Error( SD_CMD_ERASE)) != SD_OK)
+    if((ErrorState = SD_TransmitCommand((SD_CMD_ERASE | SDMMC_CMD_RESPONSE_SHORT), 0, 1)) != SD_OK)
     {
         return ErrorState;
     }
@@ -1062,10 +1099,7 @@ SD_Error_t SD_WideBusOperationConfig(uint32_t WideMode)
 SD_Error_t SD_StopTransfer(void)
 {
     // Send CMD12 STOP_TRANSMISSION
-     SD_TransmitCommand((SD_CMD_STOP_TRANSMISSION  | SDMMC_CMD_RESPONSE_SHORT), 0, 1);
-
-    // Check for error conditions
-    return SD_CmdResp1Error(SD_CMD_STOP_TRANSMISSION);
+    return SD_TransmitCommand((SD_CMD_STOP_TRANSMISSION  | SDMMC_CMD_RESPONSE_SHORT), 0, 1);
 }
 
 /** -----------------------------------------------------------------------------------------------------------------*/
@@ -1098,10 +1132,7 @@ SD_Error_t HAL_SD_HighSpeed(void)
     if(SD_SPEC != SD_ALLZERO)
     {
         // Set Block Size for Card
-        SD_TransmitCommand((SD_CMD_SET_BLOCKLEN | SDMMC_CMD_RESPONSE_SHORT), 64, 1);
-
-        // Check for error conditions
-        if((ErrorState = SD_CmdResp1Error( SD_CMD_SET_BLOCKLEN)) != SD_OK)
+        if((ErrorState = SD_TransmitCommand((SD_CMD_SET_BLOCKLEN | SDMMC_CMD_RESPONSE_SHORT), 64, 1)) != SD_OK)
         {
             return ErrorState;
         }
@@ -1110,10 +1141,7 @@ SD_Error_t HAL_SD_HighSpeed(void)
         SD_DataTransferInit(64, SDMMC_DATABLOCK_SIZE_64B, true);
 
         // Send CMD6 switch mode
-        SD_TransmitCommand((SD_CMD_HS_SWITCH | SDMMC_CMD_RESPONSE_SHORT), 0x80FFFF01, 1);
-
-        // Check for error conditions
-        if((ErrorState = SD_CmdResp1Error( SD_CMD_HS_SWITCH)) != SD_OK)
+        if((ErrorState =SD_TransmitCommand((SD_CMD_HS_SWITCH | SDMMC_CMD_RESPONSE_SHORT), 0x80FFFF01, 1)) != SD_OK)
         {
             return ErrorState;
         }
@@ -1188,19 +1216,13 @@ SD_Error_t HAL_SD_SendSDStatus(uint32_t *pSDstatus)
     }
 
     // Set block size for card if it is not equal to current block size for card
-     SD_TransmitCommand((SD_CMD_SET_BLOCKLEN | SDMMC_CMD_RESPONSE_SHORT), 64, 1);
-
-    // Check for error conditions
-    if((ErrorState = SD_CmdResp1Error( SD_CMD_SET_BLOCKLEN)) != SD_OK)
+    if((ErrorState = SD_TransmitCommand((SD_CMD_SET_BLOCKLEN | SDMMC_CMD_RESPONSE_SHORT), 64, 1)) != SD_OK)
     {
         return ErrorState;
     }
 
     // Send CMD55
-    SD_TransmitCommand((SD_CMD_APP_CMD | SDMMC_CMD_RESPONSE_SHORT), SD_Handle.RCA << 16, 1);
-
-    // Check for error conditions
-    if((ErrorState = SD_CmdResp1Error( SD_CMD_APP_CMD)) != SD_OK)
+    if((ErrorState = SD_TransmitCommand((SD_CMD_APP_CMD | SDMMC_CMD_RESPONSE_SHORT), SD_Handle.RCA << 16, 1)) != SD_OK)
     {
         return ErrorState;
     }
@@ -1209,10 +1231,7 @@ SD_Error_t HAL_SD_SendSDStatus(uint32_t *pSDstatus)
     SD_DataTransferInit(64, SDMMC_DATABLOCK_SIZE_64B, true);
 
     // Send ACMD13 (SD_APP_STAUS)  with argument as card's RCA
-    SD_TransmitCommand((SD_CMD_SD_APP_STATUS | SDMMC_CMD_RESPONSE_SHORT), 0, 1);
-
-    // Check for error conditions
-    if((ErrorState = SD_CmdResp1Error( SD_CMD_SD_APP_STATUS)) != SD_OK)
+    if((ErrorState = SD_TransmitCommand((SD_CMD_SD_APP_STATUS | SDMMC_CMD_RESPONSE_SHORT), 0, 1)) != SD_OK)
     {
         return ErrorState;
     }
@@ -1374,10 +1393,7 @@ SD_Error_t SD_GetCardStatus(SD_CardStatus_t* pCardStatus)
 static SD_Error_t SD_Select_Deselect(uint64_t Address)
 {
     // Send CMD7 SDMMC_SEL_DESEL_CARD
-    SD_TransmitCommand((SD_CMD_SEL_DESEL_CARD | SDMMC_CMD_RESPONSE_SHORT), (uint32_t)Address, 1);
-
-    // check for error conditions
-    return SD_CmdResp1Error( SD_CMD_SEL_DESEL_CARD);
+    return SD_TransmitCommand((SD_CMD_SEL_DESEL_CARD | SDMMC_CMD_RESPONSE_SHORT), (uint32_t)Address, 1);
 }
 
 
@@ -1435,12 +1451,9 @@ static SD_Error_t SD_PowerON(void)
     }
 
     // Send CMD55
-    SD_TransmitCommand((SD_CMD_APP_CMD | SDMMC_CMD_RESPONSE_SHORT), 0, 1);
-
-    // Check for error conditions
     // If ErrorState is Command Timeout, it is a MMC card
     // If ErrorState is SD_OK it is a SD card: SD card 2.0 (voltage range mismatch) or SD card 1.x
-    if((ErrorState = SD_CmdResp1Error(SD_CMD_APP_CMD)) == SD_OK)
+    if((ErrorState = SD_TransmitCommand((SD_CMD_APP_CMD | SDMMC_CMD_RESPONSE_SHORT), 0, 1)) == SD_OK)
     {
         // SD CARD
         // Send ACMD41 SD_APP_OP_COND with Argument 0x80100000
@@ -1448,10 +1461,7 @@ static SD_Error_t SD_PowerON(void)
         {
 
             // SEND CMD55 APP_CMD with RCA as 0
-            SD_TransmitCommand((SD_CMD_APP_CMD | SDMMC_CMD_RESPONSE_SHORT), 0, 1);
-
-            // Check for error conditions
-            if((ErrorState = SD_CmdResp1Error( SD_CMD_APP_CMD)) != SD_OK)
+            if((ErrorState = SD_TransmitCommand((SD_CMD_APP_CMD | SDMMC_CMD_RESPONSE_SHORT), 0, 1)) != SD_OK)
             {
                 return ErrorState;
             }
@@ -1510,10 +1520,7 @@ static SD_Error_t SD_SendStatus(uint32_t *pCardStatus)
     SD_Error_t ErrorState;
 
     // Send Status command
-    SD_TransmitCommand((SD_CMD_SEND_STATUS | SDMMC_CMD_RESPONSE_SHORT), SD_Handle.RCA << 16, 1);
-
-    // Check for error conditions
-    if((ErrorState = SD_CmdResp1Error(SD_CMD_SEND_STATUS)) == SD_OK)
+    if((ErrorState = SD_TransmitCommand((SD_CMD_SEND_STATUS | SDMMC_CMD_RESPONSE_SHORT), SD_Handle.RCA << 16, 1)) == SD_OK)
     {
         *pCardStatus = SDMMC1->RESP1;
     }
@@ -1594,65 +1601,6 @@ static SD_Error_t SD_CmdResp7Error(void)
 
 /** -----------------------------------------------------------------------------------------------------------------*/
 /**
-  * @brief  Checks for error conditions for R1 response.
-  * @param  SD_CMD: The sent command Index
-  * @retval SD Card error state
-  */
-static SD_Error_t SD_CmdResp1Error(uint8_t SD_CMD)
-{
-    uint32_t response_r1;
-
-    while((SDMMC1->STA & (SDMMC_STA_CCRCFAIL | SDMMC_STA_CMDREND | SDMMC_STA_CTIMEOUT)) == 0){};
-
-    if((SDMMC1->STA & SDMMC_STA_CTIMEOUT) != 0)
-    {
-        SDMMC1->ICR = SDMMC_ICR_CTIMEOUTC;
-        return SD_CMD_RSP_TIMEOUT;
-    }
-    else if((SDMMC1->STA & SDMMC_STA_CCRCFAIL) != 0)
-    {
-        SDMMC1->ICR = SDMMC_ICR_CCRCFAILC;
-        return SD_CMD_CRC_FAIL;
-    }
-
-    // Check response received is of desired command
-    if((uint8_t)SDMMC1->RESPCMD != SD_CMD)
-    {
-        return SD_ILLEGAL_CMD;
-    }
-
-    // Clear all the static flags
-    SDMMC1->ICR = SDMMC_ICR_STATIC_FLAGS;
-
-    // We have received response, retrieve it for analysis
-    response_r1 = SDMMC1->RESP1;
-
-    if((response_r1 & SD_OCR_ERRORBITS)             == SD_ALLZERO)                      return SD_OK;
-    if((response_r1 & SD_OCR_ADDR_OUT_OF_RANGE)     == SD_OCR_ADDR_OUT_OF_RANGE)        return SD_ADDR_OUT_OF_RANGE;
-    if((response_r1 & SD_OCR_ADDR_MISALIGNED)       == SD_OCR_ADDR_MISALIGNED)          return SD_ADDR_MISALIGNED;
-    if((response_r1 & SD_OCR_BLOCK_LEN_ERR)         == SD_OCR_BLOCK_LEN_ERR)            return SD_BLOCK_LEN_ERR;
-    if((response_r1 & SD_OCR_ERASE_SEQ_ERR)         == SD_OCR_ERASE_SEQ_ERR)            return SD_ERASE_SEQ_ERR;
-    if((response_r1 & SD_OCR_BAD_ERASE_PARAM)       == SD_OCR_BAD_ERASE_PARAM)          return SD_BAD_ERASE_PARAM;
-    if((response_r1 & SD_OCR_WRITE_PROT_VIOLATION)  == SD_OCR_WRITE_PROT_VIOLATION)     return SD_WRITE_PROT_VIOLATION;
-    if((response_r1 & SD_OCR_LOCK_UNLOCK_FAILED)    == SD_OCR_LOCK_UNLOCK_FAILED)       return SD_LOCK_UNLOCK_FAILED;
-    if((response_r1 & SD_OCR_COM_CRC_FAILED)        == SD_OCR_COM_CRC_FAILED)           return SD_COM_CRC_FAILED;
-    if((response_r1 & SD_OCR_ILLEGAL_CMD)           == SD_OCR_ILLEGAL_CMD)              return SD_ILLEGAL_CMD;
-    if((response_r1 & SD_OCR_CARD_ECC_FAILED)       == SD_OCR_CARD_ECC_FAILED)          return SD_CARD_ECC_FAILED;
-    if((response_r1 & SD_OCR_CC_ERROR)              == SD_OCR_CC_ERROR)                 return SD_CC_ERROR;
-    if((response_r1 & SD_OCR_GENERAL_UNKNOWN_ERROR) == SD_OCR_GENERAL_UNKNOWN_ERROR)    return SD_GENERAL_UNKNOWN_ERROR;
-    if((response_r1 & SD_OCR_STREAM_READ_UNDERRUN)  == SD_OCR_STREAM_READ_UNDERRUN)     return SD_STREAM_READ_UNDERRUN;
-    if((response_r1 & SD_OCR_STREAM_WRITE_OVERRUN)  == SD_OCR_STREAM_WRITE_OVERRUN)     return SD_STREAM_WRITE_OVERRUN;
-    if((response_r1 & SD_OCR_CID_CSD_OVERWRITE)     == SD_OCR_CID_CSD_OVERWRITE)        return SD_CID_CSD_OVERWRITE;
-    if((response_r1 & SD_OCR_WP_ERASE_SKIP)         == SD_OCR_WP_ERASE_SKIP)            return SD_WP_ERASE_SKIP;
-    if((response_r1 & SD_OCR_CARD_ECC_DISABLED)     == SD_OCR_CARD_ECC_DISABLED)        return SD_CARD_ECC_DISABLED;
-    if((response_r1 & SD_OCR_ERASE_RESET)           == SD_OCR_ERASE_RESET)              return SD_ERASE_RESET;
-    if((response_r1 & SD_OCR_AKE_SEQ_ERROR)         == SD_OCR_AKE_SEQ_ERROR)            return SD_AKE_SEQ_ERROR;
-    return SD_OK;
-}
-
-
-/** -----------------------------------------------------------------------------------------------------------------*/
-/**
   * @brief  Checks for error conditions for R3 (OCR) response.
   * @retval SD Card error state
   */
@@ -1683,7 +1631,7 @@ static SD_Error_t SD_CmdResp2Error(void)
 {
     SD_Error_t ErrorState = SD_OK;
 
-    while((SDMMC1->STA & (SDMMC_STA_CCRCFAIL | SDMMC_STA_CMDREND | SDMMC_STA_CTIMEOUT)) == 0){};
+    while((SDMMC1->STA & (SDMMC_STA_CCRCFAIL | SDMMC_STA_CMDREND | SDMMC_STA_CTIMEOUT)) == 0);
 
     if((SDMMC1->STA & SDMMC_STA_CTIMEOUT) != 0)
     {
@@ -1712,7 +1660,7 @@ static SD_Error_t SD_CmdResp2Error(void)
 static SD_Error_t SD_CmdResp6Error(uint8_t SD_CMD, uint16_t *pRCA)
 {
     SD_Error_t ErrorState = SD_OK;
-    uint32_t response_r1;
+    uint32_t Response_R1;
 
     while((SDMMC1->STA & (SDMMC_STA_CCRCFAIL | SDMMC_STA_CMDREND | SDMMC_STA_CTIMEOUT)) == 0){};
 
@@ -1734,17 +1682,17 @@ static SD_Error_t SD_CmdResp6Error(uint8_t SD_CMD, uint16_t *pRCA)
     }
 
     SDMMC1->ICR = SDMMC_ICR_STATIC_FLAGS;       // Clear all the static flags
-    response_r1 = SDMMC1->RESP1;                // We have received response, retrieve it.
+    Response_R1 = SDMMC1->RESP1;                // We have received response, retrieve it.
 
-    if((response_r1 & (SD_R6_GENERAL_UNKNOWN_ERROR | SD_R6_ILLEGAL_CMD | SD_R6_COM_CRC_FAILED)) == SD_ALLZERO)
+    if((Response_R1 & (SD_R6_GENERAL_UNKNOWN_ERROR | SD_R6_ILLEGAL_CMD | SD_R6_COM_CRC_FAILED)) == SD_ALLZERO)
     {
-        *pRCA = (uint16_t) (response_r1 >> 16);
+        *pRCA = (uint16_t) (Response_R1 >> 16);
         return ErrorState;
     }
 
-    if((response_r1 & SD_R6_GENERAL_UNKNOWN_ERROR) == SD_R6_GENERAL_UNKNOWN_ERROR)  return SD_GENERAL_UNKNOWN_ERROR;
-    if((response_r1 & SD_R6_ILLEGAL_CMD) == SD_R6_ILLEGAL_CMD)                      return SD_ILLEGAL_CMD;
-    if((response_r1 & SD_R6_COM_CRC_FAILED) == SD_R6_COM_CRC_FAILED)                return SD_COM_CRC_FAILED;
+    if((Response_R1 & SD_R6_GENERAL_UNKNOWN_ERROR) == SD_R6_GENERAL_UNKNOWN_ERROR)  return SD_GENERAL_UNKNOWN_ERROR;
+    if((Response_R1 & SD_R6_ILLEGAL_CMD) == SD_R6_ILLEGAL_CMD)                      return SD_ILLEGAL_CMD;
+    if((Response_R1 & SD_R6_COM_CRC_FAILED) == SD_R6_COM_CRC_FAILED)                return SD_COM_CRC_FAILED;
     return ErrorState;
 }
 
@@ -1774,19 +1722,13 @@ static SD_Error_t SD_WideBusEnable(void)
     if((scr[1] & SD_WIDE_BUS_SUPPORT) != SD_ALLZERO)
     {
         // Send CMD55 APP_CMD with argument as card's RCA.
-        SD_TransmitCommand((SD_CMD_APP_CMD | SDMMC_CMD_RESPONSE_SHORT), SD_Handle.RCA << 16, 1);
-        // Check for error conditions
-        if((ErrorState = SD_CmdResp1Error(SD_CMD_APP_CMD)) != SD_OK)
+        if((ErrorState = SD_TransmitCommand((SD_CMD_APP_CMD | SDMMC_CMD_RESPONSE_SHORT), SD_Handle.RCA << 16, 1)) != SD_OK)
         {
             return ErrorState;
         }
 
         // Send ACMD6 APP_CMD with argument as 2 for wide bus mode
-        SD_TransmitCommand((SD_CMD_APP_SD_SET_BUSWIDTH | SDMMC_CMD_RESPONSE_SHORT), 2, 1);
-
-        // Check for error conditions
-        ErrorState = SD_CmdResp1Error(SD_CMD_APP_SD_SET_BUSWIDTH);
-        return ErrorState;
+        return SD_TransmitCommand((SD_CMD_APP_SD_SET_BUSWIDTH | SDMMC_CMD_RESPONSE_SHORT), 2, 1);
     }
     else
     {
@@ -1821,19 +1763,13 @@ static SD_Error_t SD_WideBusDisable(void)
     if((scr[1] & SD_SINGLE_BUS_SUPPORT) != SD_ALLZERO)
     {
         // Send CMD55 APP_CMD with argument as card's RCA
-        SD_TransmitCommand((SD_CMD_APP_CMD | SDMMC_CMD_RESPONSE_SHORT), SD_Handle.RCA << 16, 1);
-
-        // Check for error conditions
-        if((ErrorState = SD_CmdResp1Error(SD_CMD_APP_CMD)) != SD_OK)
+        if((ErrorState = SD_TransmitCommand((SD_CMD_APP_CMD | SDMMC_CMD_RESPONSE_SHORT), SD_Handle.RCA << 16, 1)) != SD_OK)
         {
             return ErrorState;
         }
 
         // Send ACMD6 APP_CMD with argument as 0 for single bus mode
-        SD_TransmitCommand((SD_CMD_APP_SD_SET_BUSWIDTH | SDMMC_CMD_RESPONSE_SHORT), 0, 1);
-
-        // Check for error conditions
-        return SD_CmdResp1Error( SD_CMD_APP_SD_SET_BUSWIDTH);;
+        return SD_TransmitCommand((SD_CMD_APP_SD_SET_BUSWIDTH | SDMMC_CMD_RESPONSE_SHORT), 0, 1);
     }
     else
     {
@@ -1856,19 +1792,13 @@ static SD_Error_t SD_FindSCR(uint32_t *pSCR)
 
     // Set Block Size To 8 Bytes
     // Send CMD55 APP_CMD with argument as card's RCA
-    SD_TransmitCommand((SD_CMD_SET_BLOCKLEN | SDMMC_CMD_RESPONSE_SHORT), 8, 1);
-
-    // Check for error conditions
-    if((ErrorState = SD_CmdResp1Error(SD_CMD_SET_BLOCKLEN)) != SD_OK)
+    if((ErrorState = SD_TransmitCommand((SD_CMD_SET_BLOCKLEN | SDMMC_CMD_RESPONSE_SHORT), 8, 1)) != SD_OK)
     {
         return ErrorState;
     }
 
     // Send CMD55 APP_CMD with argument as card's RCA
-    SD_TransmitCommand((SD_CMD_APP_CMD | SDMMC_CMD_RESPONSE_SHORT), SD_Handle.RCA << 16, 1);
-
-    // Check for error conditions
-    if((ErrorState = SD_CmdResp1Error(SD_CMD_APP_CMD)) != SD_OK)
+    if((ErrorState = SD_TransmitCommand((SD_CMD_APP_CMD | SDMMC_CMD_RESPONSE_SHORT), SD_Handle.RCA << 16, 1)) != SD_OK)
     {
         return ErrorState;
     }
@@ -1876,10 +1806,7 @@ static SD_Error_t SD_FindSCR(uint32_t *pSCR)
     SD_DataTransferInit(8, SDMMC_DATABLOCK_SIZE_8B, true);
 
     // Send ACMD51 SD_APP_SEND_SCR with argument as 0
-    SD_TransmitCommand((SD_CMD_SD_APP_SEND_SCR | SDMMC_CMD_RESPONSE_SHORT), 0, 1);
-
-    // Check for error conditions
-    if((ErrorState = SD_CmdResp1Error(SD_CMD_SD_APP_SEND_SCR)) != SD_OK)
+    if((ErrorState = SD_TransmitCommand((SD_CMD_SD_APP_SEND_SCR | SDMMC_CMD_RESPONSE_SHORT), 0, 1)) != SD_OK)
     {
         return ErrorState;
     }
