@@ -9,18 +9,29 @@ The project run on EmBitz 1.1
 It was originally running on Keil, so it is easy to convert back to Keil
 
 Purpose of this project is to help other use the SDMMC module without the hassle of using the HAL (Horror At Large) library from ST.
-  CON of the HAL
+
+CON of the HAL.
+  
     - The HAL library is very hard to follow.
+    
     - to much useless redefinition.
+    
     - Very complicated.
+    
     - Take a lot of space. (10K less for this driver)
+    
     - Slow
     
  PRO of this driver.
+ 
     - Compact.
+    
     - Ready for FatFS.
+    
     - Easy to understand.
+    
     - Very basic example.
+    
     - Provide 99% of the need for any project.
     
     Please feel free to contribute. if you notice any point that may need attention.
