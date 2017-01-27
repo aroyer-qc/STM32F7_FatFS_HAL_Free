@@ -34,4 +34,4 @@ CON of the HAL.
     
     - Provide 99% of the need for any project.
     
-    Please feel free to contribute. if you notice any point that may need attention.
+Please feel free to contribute. if you notice any point that may need attention.
