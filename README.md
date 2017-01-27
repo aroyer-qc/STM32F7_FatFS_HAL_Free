@@ -18,10 +18,8 @@ CON of the HAL.
     
     - Very complicated.
     
-    - Take a lot of space. (10K less for this driver)
-    
-    - Slow
-    
+    - Take a lot of space. (10K more than this driver)
+          
  PRO of this driver.
  
     - Compact.
