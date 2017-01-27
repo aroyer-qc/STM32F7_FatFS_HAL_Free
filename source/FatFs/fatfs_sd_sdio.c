@@ -279,8 +279,8 @@ static uint16_t         SD_CardRCA;
 
 static bool 	        SD_IsDetected               (void);
 static void             SD_DataTransferInit         (uint32_t Size, uint32_t DataBlockSize, bool IsItReadFromCard);
-static SD_Error_t       SD_TransmitCommand          (uint32_t Command, uint32_t Argument, uint8_t ResponseType);
-static SD_Error_t       SD_CmdResponse              (uint8_t SD_CMD, uint8_t ResponseType);
+static SD_Error_t       SD_TransmitCommand          (uint32_t Command, uint32_t Argument, int8_t ResponseType);
+static SD_Error_t       SD_CmdResponse              (uint8_t SD_CMD, int8_t ResponseType);
 static void             SD_GetResponse              (uint32_t* pResponse);
 static SD_Error_t       CheckOCR_Response           (uint32_t Response_R1);
 static void             SD_DMA_Complete             (DMA_Stream_TypeDef* pDMA_Stream);
@@ -340,12 +340,14 @@ static void SD_DataTransferInit(uint32_t Size, uint32_t DataBlockSize, bool IsIt
   * @param  uint8_t ResponseType
   * @retval SD Card error state
   */
-static SD_Error_t SD_TransmitCommand(uint32_t Command, uint32_t Argument, uint8_t ResponseType)
+static SD_Error_t SD_TransmitCommand(uint32_t Command, uint32_t Argument, int8_t ResponseType)
 {
-    SDMMC1->ICR = SDMMC_ICR_STATIC_FLAGS;                     // Clear the Command Flags
-    SDMMC1->ARG = (uint32_t)Argument;                         // Set the SDMMC Argument value
-    SDMMC1->CMD = (uint32_t)(Command | SDMMC_CMD_CPSMEN);     // Set SDMMC command parameters
+    SDMMC1->ICR = SDMMC_ICR_STATIC_FLAGS;                               // Clear the Command Flags
+    SDMMC1->ARG = (uint32_t)Argument;                                   // Set the SDMMC Argument value
+    SDMMC1->CMD = (uint32_t)(Command | SDMMC_CMD_CPSMEN);               // Set SDMMC command parameters
+    if((Argument == 0) && (ResponseType == 0)) ResponseType = -1;       // Go idle command
     return SD_CmdResponse(Command & SDMMC_CMD_CMDINDEX, ResponseType);
+    SDMMC1->ICR = SDMMC_ICR_STATIC_FLAGS;                               // Clear the Command Flags
 }
 
 
@@ -358,14 +360,14 @@ static SD_Error_t SD_TransmitCommand(uint32_t Command, uint32_t Argument, uint8_
   * @param  SD_CMD: The sent command Index
   * @retval SD Card error state
   */
-static SD_Error_t SD_CmdResponse(uint8_t SD_CMD, uint8_t ResponseType)
+static SD_Error_t SD_CmdResponse(uint8_t SD_CMD, int8_t ResponseType)
 {
     uint32_t Response_R1;
     uint32_t TimeOut;
     uint32_t Flag;
 
-    if(ResponseType == 0) Flag = SDMMC_STA_CMDSENT;
-    else                  Flag = SDMMC_STA_CCRCFAIL | SDMMC_STA_CMDREND | SDMMC_STA_CTIMEOUT;
+    if(ResponseType == -1) Flag = SDMMC_STA_CMDSENT;
+    else                   Flag = SDMMC_STA_CCRCFAIL | SDMMC_STA_CMDREND | SDMMC_STA_CTIMEOUT;
 
     TimeOut = SD_SOFTWARE_COMMAND_TIMEOUT;
     do
@@ -373,9 +375,9 @@ static SD_Error_t SD_CmdResponse(uint8_t SD_CMD, uint8_t ResponseType)
         Status = SDMMC1->STA;
         TimeOut--;
     }
-    while(((Status &Flag) == 0) && (TimeOut >= 0));
+    while(((Status & Flag) == 0) && (TimeOut > 0));
 
-    if(ResponseType == 0)
+    if(ResponseType <= 0)
     {
         if(TimeOut == 0)  return SD_CMD_RSP_TIMEOUT;
         return SD_OK;
@@ -1643,8 +1645,6 @@ static SD_Error_t SD_IsCardProgramming(uint8_t *pStatus)
     uint32_t Response_R1;
 
     SD_TransmitCommand((SD_CMD_SEND_STATUS | SDMMC_CMD_RESPONSE_SHORT), SD_Handle.RCA << 16, 0);
-    while((SDMMC1->STA & (SDMMC_STA_CCRCFAIL | SDMMC_STA_CMDREND | SDMMC_STA_CTIMEOUT)) == 0);
-
     if((SDMMC1->STA & SDMMC_STA_CTIMEOUT) != 0)         return SD_CMD_RSP_TIMEOUT;
     else if((SDMMC1->STA & SDMMC_STA_CCRCFAIL) != 0)    return SD_CMD_CRC_FAIL;
     if((uint32_t)SDMMC1->RESPCMD != SD_CMD_SEND_STATUS) return SD_ILLEGAL_CMD;  // Check if is of desired command
