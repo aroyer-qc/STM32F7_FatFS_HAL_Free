@@ -86,17 +86,19 @@ typedef enum
     SD_SDMMC_FUNCTION_BUSY             = (31),
     SD_SDMMC_FUNCTION_FAILED           = (32),
     SD_SDMMC_UNKNOWN_FUNCTION          = (33),
-
+    SD_OUT_OF_BOUND                    = (34),
+    
+    
     // Standard error defines
-    SD_INTERNAL_ERROR                  = (34),
-    SD_NOT_CONFIGURED                  = (35),
-    SD_REQUEST_PENDING                 = (36),
-    SD_REQUEST_NOT_APPLICABLE          = (37),
-    SD_INVALID_PARAMETER               = (38),
-    SD_UNSUPPORTED_FEATURE             = (39),
-    SD_UNSUPPORTED_HW                  = (40),
-    SD_ERROR                           = (41),
-    SD_BUSY                            = (42),
+    SD_INTERNAL_ERROR                  = (35),
+    SD_NOT_CONFIGURED                  = (36),
+    SD_REQUEST_PENDING                 = (37),
+    SD_REQUEST_NOT_APPLICABLE          = (38),
+    SD_INVALID_PARAMETER               = (39),
+    SD_UNSUPPORTED_FEATURE             = (40),
+    SD_UNSUPPORTED_HW                  = (41),
+    SD_ERROR                           = (42),
+    SD_BUSY                            = (43),
     SD_OK                              = (0)
 } SD_Error_t;
 
@@ -130,7 +132,6 @@ SD_Error_t       SD_GetStatus                (void);
 SD_Error_t       SD_GetCardInfo              (void);
 
 SD_Error_t       SD_Erase                    (uint64_t StartAddress, uint64_t EndAddress);
-SD_Error_t       SD_SendSDStatus             (uint32_t *pSDstatus);
 SD_Error_t       SD_GetCardStatus            (SD_CardStatus_t* pCardStatus);
 
 /* ------------------------------------------------------------------------------------------------------------------*/
