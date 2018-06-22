@@ -1,6 +1,6 @@
-# STM32F7_FatFS_HAL_Free
+# STM32F7_FatFS_HAL_Free[![Donate](https://img.shields.io/badge/Donate-PayPal-green.svg)](https://www.paypal.me/aroyerqc)
 
-[![Donate](https://img.shields.io/badge/Donate-PayPal-green.svg)](https://www.paypal.me/aroyerqc)
+
 BARE-METAL Example of the FatFs running on the SDMMC of the STM32F746G-DISCO No HAL at all... full bare-metal
 
 This repository is a driver for SD card interface on the STM32F7xx processor from ST
